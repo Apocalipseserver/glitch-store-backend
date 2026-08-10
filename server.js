@@ -5,276 +5,110 @@ const app = express();
 
 const PORT = process.env.PORT || 3000;
 
-// ==============================
-// CONFIGURACIÓN
-// ==============================
-
 app.use(cors());
 app.use(express.json());
 
-// ==============================
-// DATOS TEMPORALES
-// ==============================
+/* ==============================
+DATOS TEMPORALES
+============================== */
 
 let orders = [];
 
 let products = [
-    {
-        id: 1,
-        name: "Recarga $5",
-        price: 5,
-        active: true
-    },
-    {
-        id: 2,
-        name: "Recarga $10",
-        price: 10,
-        active: true
-    },
-    {
-        id: 3,
-        name: "Recarga $20",
-        price: 20,
-        active: true
-    },
-    {
-        id: 4,
-        name: "Recarga $50",
-        price: 50,
-        active: true
-    }
+{
+id: 1,
+name: "Recarga $5",
+price: 5,
+active: true
+},
+{
+id: 2,
+name: "Recarga $10",
+price: 10,
+active: true
+},
+{
+id: 3,
+name: "Recarga $20",
+price: 20,
+active: true
+},
+{
+id: 4,
+name: "Recarga $50",
+price: 50,
+active: true
+}
 ];
 
-// ==============================
-// RUTA PRINCIPAL
-// ==============================
+/* ==============================
+INICIO
+============================== */
 
 app.get("/", (req, res) => {
-    res.json({
-        success: true,
-        message: "Glitch Store API funcionando ⚡",
-        version: "1.0.0"
-    });
+
+res.json({
+    success: true,
+    message: "Glitch Store API funcionando ⚡",
+    version: "1.1.0"
 });
 
-// ==============================
-// ESTADO DEL SERVIDOR
-// ==============================
+});
+
+/* ==============================
+ESTADO
+============================== */
 
 app.get("/api/status", (req, res) => {
 
-    res.json({
-        online: true,
-        service: "Glitch Store Backend",
-        orders: orders.length,
-        products: products.length,
-        time: new Date().toISOString()
-    });
+res.json({
+    success: true,
+    online: true,
+    service: "Glitch Store Backend",
+    orders: orders.length,
+    products: products.length,
+    time: new Date().toISOString()
+});
 
 });
 
-// ==============================
-// PRODUCTOS
-// ==============================
+/* ==============================
+PRODUCTOS
+============================== */
 
 app.get("/api/products", (req, res) => {
 
-    const activeProducts =
-        products.filter(product => product.active);
+const activeProducts =
+    products.filter(product => product.active);
 
-    res.json({
-        success: true,
-        products: activeProducts
-    });
+res.json({
+    success: true,
+    products: activeProducts
+});
 
 });
 
-// ==============================
-// CREAR PEDIDO
-// ==============================
+/* ==============================
+CREAR PEDIDO
+============================== */
 
 app.post("/api/orders", (req, res) => {
 
-    try {
-
-        const {
-            name,
-            phone,
-            productId,
-            paymentReference
-        } = req.body;
-
-        // Validación básica
-
-        if (
-            !name ||
-            !phone ||
-            !productId ||
-            !paymentReference
-        ) {
-
-            return res.status(400).json({
-                success: false,
-                message: "Faltan datos del pedido."
-            });
-
-        }
-
-        // Buscar producto
-
-        const product =
-            products.find(
-                item => item.id === Number(productId)
-            );
-
-        if (!product || !product.active) {
-
-            return res.status(404).json({
-                success: false,
-                message: "Producto no disponible."
-            });
-
-        }
-
-        // Crear ID
-
-        const orderId =
-            "GL-" +
-            Date.now().toString().slice(-8);
-
-        // Crear pedido
-
-        const order = {
-
-            id: orderId,
-
-            customer: {
-                name: name,
-                phone: phone
-            },
-
-            product: {
-                id: product.id,
-                name: product.name,
-                price: product.price
-            },
-
-            paymentReference:
-                paymentReference,
-
-            status: "pending",
-
-            createdAt:
-                new Date().toISOString()
-
-        };
-
-        orders.push(order);
-
-        console.log(
-            "Nuevo pedido:",
-            order
-        );
-
-        res.status(201).json({
-
-            success: true,
-
-            message:
-                "Pedido creado correctamente.",
-
-            order: order
-
-        });
-
-    } catch (error) {
-
-        console.error(error);
-
-        res.status(500).json({
-
-            success: false,
-
-            message:
-                "Error interno del servidor."
-
-        });
-
-    }
-
-});
-
-// ==============================
-// CONSULTAR PEDIDO
-// ==============================
-
-app.get("/api/orders/:id", (req, res) => {
-
-    const order =
-        orders.find(
-            item => item.id === req.params.id
-        );
-
-    if (!order) {
-
-        return res.status(404).json({
-
-            success: false,
-
-            message:
-                "Pedido no encontrado."
-
-        });
-
-    }
-
-    res.json({
-
-        success: true,
-
-        order: order
-
-    });
-
-});
-
-// ==============================
-// LISTAR PEDIDOS
-// ==============================
-
-app.get("/api/orders", (req, res) => {
-
-    res.json({
-
-        success: true,
-
-        total: orders.length,
-
-        orders: orders
-
-    });
-
-});
-
-// ==============================
-// CAMBIAR ESTADO
-// ==============================
-
-app.patch("/api/orders/:id/status", (req, res) => {
+try {
 
     const {
-        status
+        name,
+        phone,
+        paymentReference,
+        items
     } = req.body;
 
-    const allowedStatuses = [
-        "pending",
-        "processing",
-        "completed",
-        "cancelled"
-    ];
-
     if (
-        !allowedStatuses.includes(status)
+        !name ||
+        !phone ||
+        !paymentReference ||
+        !Array.isArray(items) ||
+        items.length === 0
     ) {
 
         return res.status(400).json({
@@ -282,73 +116,298 @@ app.patch("/api/orders/:id/status", (req, res) => {
             success: false,
 
             message:
-                "Estado no válido."
+                "Faltan datos del pedido."
 
         });
 
     }
 
-    const order =
-        orders.find(
-            item => item.id === req.params.id
+    /* ==============================
+       VALIDAR PRODUCTOS
+    ============================== */
+
+    const orderItems = [];
+
+    for (const item of items) {
+
+        const product =
+            products.find(
+                product =>
+                    product.id === Number(item.productId)
+            );
+
+        if (!product || !product.active) {
+
+            return res.status(404).json({
+
+                success: false,
+
+                message:
+                    "Uno de los productos no está disponible."
+
+            });
+
+        }
+
+        const quantity =
+            Math.max(
+                1,
+                Number(item.quantity) || 1
+            );
+
+        orderItems.push({
+
+            id: product.id,
+
+            name: product.name,
+
+            price: product.price,
+
+            quantity: quantity,
+
+            subtotal:
+                product.price * quantity
+
+        });
+
+    }
+
+    /* ==============================
+       CALCULAR TOTAL
+    ============================== */
+
+    const total =
+        orderItems.reduce(
+            (sum, item) =>
+                sum + item.subtotal,
+            0
         );
 
-    if (!order) {
+    /* ==============================
+       ID DEL PEDIDO
+    ============================== */
 
-        return res.status(404).json({
+    const orderId =
+        "GL-" +
+        Date.now()
+            .toString()
+            .slice(-8);
 
-            success: false,
+    /* ==============================
+       CREAR PEDIDO
+    ============================== */
 
-            message:
-                "Pedido no encontrado."
+    const order = {
 
-        });
+        id: orderId,
 
-    }
+        customer: {
 
-    order.status = status;
+            name: name,
 
-    order.updatedAt =
-        new Date().toISOString();
+            phone: phone
 
-    res.json({
+        },
+
+        items: orderItems,
+
+        total: total,
+
+        paymentReference:
+            paymentReference,
+
+        status: "pending",
+
+        createdAt:
+            new Date().toISOString()
+
+    };
+
+    orders.push(order);
+
+    console.log(
+        "Nuevo pedido:",
+        order
+    );
+
+    res.status(201).json({
 
         success: true,
 
         message:
-            "Estado actualizado.",
+            "Pedido creado correctamente.",
 
         order: order
 
     });
 
-});
+} catch (error) {
 
-// ==============================
-// ERROR 404
-// ==============================
+    console.error(
+        "Error creando pedido:",
+        error
+    );
 
-app.use((req, res) => {
-
-    res.status(404).json({
+    res.status(500).json({
 
         success: false,
 
         message:
-            "Ruta no encontrada."
+            "Error interno del servidor."
 
     });
 
+}
+
 });
 
-// ==============================
-// INICIAR SERVIDOR
-// ==============================
+/* ==============================
+CONSULTAR PEDIDO
+============================== */
+
+app.get("/api/orders/:id", (req, res) => {
+
+const order =
+    orders.find(
+        item =>
+            item.id === req.params.id
+    );
+
+if (!order) {
+
+    return res.status(404).json({
+
+        success: false,
+
+        message:
+            "Pedido no encontrado."
+
+    });
+
+}
+
+res.json({
+
+    success: true,
+
+    order: order
+
+});
+
+});
+
+/* ==============================
+LISTAR PEDIDOS
+============================== */
+
+app.get("/api/orders", (req, res) => {
+
+res.json({
+
+    success: true,
+
+    total: orders.length,
+
+    orders: orders
+
+});
+
+});
+
+/* ==============================
+CAMBIAR ESTADO
+============================== */
+
+app.patch("/api/orders/:id/status", (req, res) => {
+
+const {
+    status
+} = req.body;
+
+const allowedStatuses = [
+    "pending",
+    "processing",
+    "completed",
+    "cancelled"
+];
+
+if (
+    !allowedStatuses.includes(status)
+) {
+
+    return res.status(400).json({
+
+        success: false,
+
+        message:
+            "Estado no válido."
+
+    });
+
+}
+
+const order =
+    orders.find(
+        item =>
+            item.id === req.params.id
+    );
+
+if (!order) {
+
+    return res.status(404).json({
+
+        success: false,
+
+        message:
+            "Pedido no encontrado."
+
+    });
+
+}
+
+order.status = status;
+
+order.updatedAt =
+    new Date().toISOString();
+
+res.json({
+
+    success: true,
+
+    message:
+        "Estado actualizado.",
+
+    order: order
+
+});
+
+});
+
+/* ==============================
+404
+============================== */
+
+app.use((req, res) => {
+
+res.status(404).json({
+
+    success: false,
+
+    message:
+        "Ruta no encontrada."
+
+});
+
+});
+
+/* ==============================
+SERVIDOR
+============================== */
 
 app.listen(PORT, () => {
 
-    console.log(
-        `Glitch Store API ejecutándose en el puerto ${PORT}`
-    );
+console.log(
+    `Glitch Store API ejecutándose en el puerto ${PORT}`
+);
 
 });
