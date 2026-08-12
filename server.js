@@ -99,12 +99,12 @@ app.get("/api/player", async (req, res) => {
 
 
     const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        "x-api-key": GAMESKINBO_API_KEY,
-        "Accept": "application/json"
-      }
-    });
+  method: "GET",
+  headers: {
+    "x-api-key": GAMESKINBO_API_KEY.trim(),
+    "Accept": "application/json"
+  }
+});
 
 
     // ------------------------------
