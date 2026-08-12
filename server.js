@@ -213,6 +213,71 @@ app.get("/api/player", async (req, res) => {
 
 
 // ==============================
+// PRUEBA DE GAMESKINBO
+// ==============================
+
+app.get("/api/gameskinbo-test", async (req, res) => {
+
+  try {
+
+    if (!GAMESKINBO_API_KEY) {
+      return res.status(500).json({
+        ok: false,
+        error: "GAMESKINBO_API_KEY no está configurada."
+      });
+    }
+
+    const response = await fetch(
+      "https://api.gameskinbo.com/api/usage",
+      {
+        method: "GET",
+        headers: {
+          "x-api-key": GAMESKINBO_API_KEY.trim(),
+          "Accept": "application/json"
+        }
+      }
+    );
+
+    const text = await response.text();
+
+    let data;
+
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = {
+        raw: text
+      };
+    }
+
+    console.log(
+      "GamesKinbo /api/usage:",
+      response.status,
+      data
+    );
+
+    return res.status(response.status).json({
+      ok: response.ok,
+      gameskinboStatus: response.status,
+      data
+    });
+
+  } catch (error) {
+
+    console.error(
+      "Error probando GamesKinbo:",
+      error
+    );
+
+    return res.status(500).json({
+      ok: false,
+      error: "No se pudo conectar con GamesKinbo."
+    });
+
+  }
+
+});
+// ==============================
 // CREAR PEDIDO
 // ==============================
 
