@@ -4,410 +4,334 @@ const cors = require("cors");
 const app = express();
 
 const PORT = process.env.PORT || 3000;
+const GAMESKINBO_API_KEY = process.env.GAMESKINBO_API_KEY;
+
+// ==============================
+// CONFIGURACIÓN
+// ==============================
 
 app.use(cors());
 app.use(express.json());
 
-/* ==============================
-DATOS TEMPORALES
-============================== */
 
-let orders = [];
-
-let products = [
-{
-id: 1,
-name: "Recarga $5",
-price: 5,
-active: true
-},
-{
-id: 2,
-name: "Recarga $10",
-price: 10,
-active: true
-},
-{
-id: 3,
-name: "Recarga $20",
-price: 20,
-active: true
-},
-{
-id: 4,
-name: "Recarga $50",
-price: 50,
-active: true
-}
-];
-
-/* ==============================
-INICIO
-============================== */
+// ==============================
+// RUTA PRINCIPAL
+// ==============================
 
 app.get("/", (req, res) => {
-
-res.json({
-    success: true,
-    message: "Glitch Store API funcionando ⚡",
-    version: "1.1.0"
+  res.json({
+    ok: true,
+    message: "Glitch Recargas API funcionando",
+    service: "Free Fire Player Checker"
+  });
 });
 
-});
 
-/* ==============================
-ESTADO
-============================== */
+// ==============================
+// ESTADO DE LA API
+// ==============================
 
 app.get("/api/status", (req, res) => {
-
-res.json({
-    success: true,
-    online: true,
-    service: "Glitch Store Backend",
-    orders: orders.length,
-    products: products.length,
-    time: new Date().toISOString()
+  res.json({
+    ok: true,
+    gameskinboConfigured: Boolean(GAMESKINBO_API_KEY),
+    timestamp: new Date().toISOString()
+  });
 });
 
+
+// ==============================
+// CONSULTAR JUGADOR FREE FIRE
+// ==============================
+
+app.get("/api/player", async (req, res) => {
+
+  try {
+
+    const uid = String(req.query.uid || "").trim();
+    const region = String(req.query.region || "SAC").trim().toUpperCase();
+
+
+    // ------------------------------
+    // VALIDAR UID
+    // ------------------------------
+
+    if (!uid) {
+      return res.status(400).json({
+        ok: false,
+        error: "Debes proporcionar un UID."
+      });
+    }
+
+    if (!/^[0-9]+$/.test(uid)) {
+      return res.status(400).json({
+        ok: false,
+        error: "El UID solamente puede contener números."
+      });
+    }
+
+
+    // ------------------------------
+    // VALIDAR API KEY
+    // ------------------------------
+
+    if (!GAMESKINBO_API_KEY) {
+
+      console.error(
+        "Falta la variable GAMESKINBO_API_KEY en Render."
+      );
+
+      return res.status(500).json({
+        ok: false,
+        error: "La API de GamesKinbo no está configurada."
+      });
+    }
+
+
+    // ------------------------------
+    // CONSULTAR GAMESKINBO
+    // ------------------------------
+
+    const url =
+      "https://api.gameskinbo.com/ff-info/get" +
+      `?uid=${encodeURIComponent(uid)}` +
+      `&region=${encodeURIComponent(region)}`;
+
+
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "x-api-key": GAMESKINBO_API_KEY,
+        "Accept": "application/json"
+      }
+    });
+
+
+    // ------------------------------
+    // LEER RESPUESTA
+    // ------------------------------
+
+    const text = await response.text();
+
+    let data;
+
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = {
+        raw: text
+      };
+    }
+
+
+    // ------------------------------
+    // ERROR DE GAMESKINBO
+    // ------------------------------
+
+    if (!response.ok) {
+
+      console.error(
+        "GamesKinbo respondió:",
+        response.status,
+        data
+      );
+
+      return res.status(response.status).json({
+        ok: false,
+        error: "GamesKinbo rechazó la consulta.",
+        status: response.status
+      });
+    }
+
+
+    // ------------------------------
+    // OBTENER INFORMACIÓN
+    // ------------------------------
+
+    const accountInfo =
+      data?.AccountInfo ||
+      data?.accountInfo ||
+      data?.data?.AccountInfo ||
+      data?.data ||
+      null;
+
+
+    const nickname =
+      accountInfo?.AccountName ||
+      accountInfo?.accountName ||
+      data?.AccountName ||
+      data?.accountName ||
+      null;
+
+
+    // ------------------------------
+    // JUGADOR NO ENCONTRADO
+    // ------------------------------
+
+    if (!nickname) {
+
+      return res.status(404).json({
+        ok: false,
+        error: "No se encontró información para ese UID.",
+        uid,
+        region
+      });
+    }
+
+
+    // ------------------------------
+    // RESPUESTA
+    // ------------------------------
+
+    return res.json({
+
+      ok: true,
+
+      player: {
+        uid: uid,
+        nickname: nickname,
+        region: region
+      }
+
+    });
+
+  } catch (error) {
+
+    console.error(
+      "Error consultando jugador:",
+      error
+    );
+
+    return res.status(500).json({
+      ok: false,
+      error: "Error interno del servidor."
+    });
+
+  }
+
 });
 
-/* ==============================
-PRODUCTOS
-============================== */
 
-app.get("/api/products", (req, res) => {
+// ==============================
+// CREAR PEDIDO
+// ==============================
 
-const activeProducts =
-    products.filter(product => product.active);
+app.post("/api/orders", async (req, res) => {
 
-res.json({
-    success: true,
-    products: activeProducts
-});
-
-});
-
-/* ==============================
-CREAR PEDIDO
-============================== */
-
-app.post("/api/orders", (req, res) => {
-
-try {
+  try {
 
     const {
-        name,
-        phone,
-        paymentReference,
-        items
+      game,
+      playerId,
+      diamonds,
+      price,
+      currency
     } = req.body;
 
-    if (
-        !name ||
-        !phone ||
-        !paymentReference ||
-        !Array.isArray(items) ||
-        items.length === 0
-    ) {
 
-        return res.status(400).json({
-
-            success: false,
-
-            message:
-                "Faltan datos del pedido."
-
-        });
-
+    if (!playerId) {
+      return res.status(400).json({
+        ok: false,
+        error: "Falta el ID del jugador."
+      });
     }
 
-    /* ==============================
-       VALIDAR PRODUCTOS
-    ============================== */
 
-    const orderItems = [];
-
-    for (const item of items) {
-
-        const product =
-            products.find(
-                product =>
-                    product.id === Number(item.productId)
-            );
-
-        if (!product || !product.active) {
-
-            return res.status(404).json({
-
-                success: false,
-
-                message:
-                    "Uno de los productos no está disponible."
-
-            });
-
-        }
-
-        const quantity =
-            Math.max(
-                1,
-                Number(item.quantity) || 1
-            );
-
-        orderItems.push({
-
-            id: product.id,
-
-            name: product.name,
-
-            price: product.price,
-
-            quantity: quantity,
-
-            subtotal:
-                product.price * quantity
-
-        });
-
+    if (!diamonds) {
+      return res.status(400).json({
+        ok: false,
+        error: "Falta la cantidad de diamantes."
+      });
     }
 
-    /* ==============================
-       CALCULAR TOTAL
-    ============================== */
-
-    const total =
-        orderItems.reduce(
-            (sum, item) =>
-                sum + item.subtotal,
-            0
-        );
-
-    /* ==============================
-       ID DEL PEDIDO
-    ============================== */
-
-    const orderId =
-        "GL-" +
-        Date.now()
-            .toString()
-            .slice(-8);
-
-    /* ==============================
-       CREAR PEDIDO
-    ============================== */
 
     const order = {
 
-        id: orderId,
+      id:
+        "GR-" +
+        Date.now() +
+        "-" +
+        Math.floor(Math.random() * 1000),
 
-        customer: {
+      game: game || "free-fire",
 
-            name: name,
+      playerId: String(playerId),
 
-            phone: phone
+      diamonds: Number(diamonds),
 
-        },
+      price: Number(price || 0),
 
-        items: orderItems,
+      currency: currency || "VES",
 
-        total: total,
+      status: "pending",
 
-        paymentReference:
-            paymentReference,
-
-        status: "pending",
-
-        createdAt:
-            new Date().toISOString()
+      createdAt: new Date().toISOString()
 
     };
 
-    orders.push(order);
 
     console.log(
-        "Nuevo pedido:",
-        order
+      "Nuevo pedido:",
+      order
     );
 
-    res.status(201).json({
 
-        success: true,
+    return res.status(201).json({
 
-        message:
-            "Pedido creado correctamente.",
+      ok: true,
 
-        order: order
+      message: "Pedido creado correctamente.",
+
+      order
 
     });
 
-} catch (error) {
+  } catch (error) {
 
     console.error(
-        "Error creando pedido:",
-        error
+      "Error creando pedido:",
+      error
     );
 
-    res.status(500).json({
-
-        success: false,
-
-        message:
-            "Error interno del servidor."
-
+    return res.status(500).json({
+      ok: false,
+      error: "No se pudo crear el pedido."
     });
 
-}
+  }
 
 });
 
-/* ==============================
-CONSULTAR PEDIDO
-============================== */
 
-app.get("/api/orders/:id", (req, res) => {
-
-const order =
-    orders.find(
-        item =>
-            item.id === req.params.id
-    );
-
-if (!order) {
-
-    return res.status(404).json({
-
-        success: false,
-
-        message:
-            "Pedido no encontrado."
-
-    });
-
-}
-
-res.json({
-
-    success: true,
-
-    order: order
-
-});
-
-});
-
-/* ==============================
-LISTAR PEDIDOS
-============================== */
-
-app.get("/api/orders", (req, res) => {
-
-res.json({
-
-    success: true,
-
-    total: orders.length,
-
-    orders: orders
-
-});
-
-});
-
-/* ==============================
-CAMBIAR ESTADO
-============================== */
-
-app.patch("/api/orders/:id/status", (req, res) => {
-
-const {
-    status
-} = req.body;
-
-const allowedStatuses = [
-    "pending",
-    "processing",
-    "completed",
-    "cancelled"
-];
-
-if (
-    !allowedStatuses.includes(status)
-) {
-
-    return res.status(400).json({
-
-        success: false,
-
-        message:
-            "Estado no válido."
-
-    });
-
-}
-
-const order =
-    orders.find(
-        item =>
-            item.id === req.params.id
-    );
-
-if (!order) {
-
-    return res.status(404).json({
-
-        success: false,
-
-        message:
-            "Pedido no encontrado."
-
-    });
-
-}
-
-order.status = status;
-
-order.updatedAt =
-    new Date().toISOString();
-
-res.json({
-
-    success: true,
-
-    message:
-        "Estado actualizado.",
-
-    order: order
-
-});
-
-});
-
-/* ==============================
-404
-============================== */
+// ==============================
+// 404
+// ==============================
 
 app.use((req, res) => {
 
-res.status(404).json({
-
-    success: false,
-
-    message:
-        "Ruta no encontrada."
+  res.status(404).json({
+    ok: false,
+    error: "Ruta no encontrada."
+  });
 
 });
 
-});
 
-/* ==============================
-SERVIDOR
-============================== */
+// ==============================
+// INICIAR SERVIDOR
+// ==============================
 
 app.listen(PORT, () => {
 
-console.log(
-    `Glitch Store API ejecutándose en el puerto ${PORT}`
-);
+  console.log(
+    `Glitch Recargas API funcionando en el puerto ${PORT}`
+  );
+
+  console.log(
+    "GamesKinbo:",
+    GAMESKINBO_API_KEY
+      ? "API KEY configurada"
+      : "API KEY NO configurada"
+  );
 
 });
